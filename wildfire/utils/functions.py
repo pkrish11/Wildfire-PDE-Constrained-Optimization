@@ -154,6 +154,10 @@ def sigmoid(u, k=.5):
     """	
     return 1 / (1 + np.exp(-k * scale(u))) #0.5 * (1 + np.tanh(k * self.scale(u)))
 
+def sigmoid_u(u, u_pc, k=10):
+    """ New sigmoid function for u, to approximate the step function H"""
+    return 1 /  (1 + np.exp(-k * (u-u_pc)))
+
 def scale(u, a=-10, b=10):
     """Scale function.
 
@@ -172,3 +176,62 @@ def scale(u, a=-10, b=10):
         Scaled value of u.
     """
     return (b - a) * (u - np.min(u)) / (np.max(u) - np.min(u)) + a
+
+
+## Additional functions for control parameter
+def time_sigmoid(t, t_i, h):
+    """
+    Sigmoid function to turn spray parameter on (if h >0) and off (if h<0).
+    """
+    return 1/(1 + np.exp(-h*(t-t_i)))
+
+def time_control(t, t_i, T, h=10):
+    """
+    function that does full on-off feature. T is model parameter-> time duration of water drop.
+    """
+    return time_sigmoid(t, t_i, h) * time_sigmoid(t, (t_i+T), -h)
+
+def spray_gaussian(x, y, t, x_i, y_i, t_i, theta_i, v, sigma_x, sigma_y):
+    """
+    moving gaussian, centered at (x_i,y_i) at t=t_i and moving in direction theta_i from positive x-axis
+    with velocity v. 
+    """
+    exp_1 = -((x-x_i) - v*np.cos(theta_i)*(t-t_i))**2 / (2*sigma_x**2)
+    exp_2 = -((y-y_i) - v*np.sin(theta_i)*(t-t_i))**2 / (2*sigma_y**2)
+    return np.exp(exp_1 + exp_2)
+
+# Helper functions to get control paramaeters (Q and M) as functions of space and time.
+
+def sum_spray_terms(x, y, t, control_params):
+    v = control_params["v"]
+    sigma_x, sigma_y = control_params["sigma_x"], control_params["sigma_y"]
+    T = control_params["T"]
+
+    control_vars = control_params["control_vars"]
+    N = np.shape(control_vars)[0] # number of water drops to be made.
+
+    sum = 0
+    for i in range(N):
+        x_i, y_i = control_vars[i, 0], control_vars[i, 1]
+        theta_i = control_vars[i, 2]
+        t_i = control_vars[i, 3]
+        # add time control * moving gaussian to total term. 
+        sum += time_control(t, t_i, T) * spray_gaussian(x, y, t, x_i, y_i, t_i, theta_i, v, sigma_x, sigma_y)
+    
+    return sum
+
+def Q_func(x, y, t, control_params):
+
+    k = control_params["k"]
+    q = -k * sum_spray_terms(x, y, t, control_params) 
+
+    return q
+
+def M_func(x, y, t, control_params):
+
+    delta = control_params["delta"]
+    m = - delta * sum_spray_terms(x, y, t, control_params)
+
+    return m
+
+

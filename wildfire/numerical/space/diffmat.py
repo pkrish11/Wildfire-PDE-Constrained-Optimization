@@ -13,10 +13,11 @@ import scipy as sp
 from scipy.linalg import circulant, toeplitz
 from scipy.sparse import csr_matrix
 
+
 # First derivative with Finite Difference Matrix
 def FD1Matrix(N, h, acc=2, sparse=False):
     """
-    Compute first derivative using Finite Difference Matrix
+    Compute first derivative using Finite Difference Matrix (central finite differences)
     with O(h^acc) of accuracy.
     
     Parameters

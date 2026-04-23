@@ -2,8 +2,10 @@
 """
 import numpy as np
 from .diffmat import FD1Matrix, FD2Matrix
+from .upwind import grad_u_upwind
 
 MAX_FLOAT = 1e10 # Defined to check divergence.... 
+
 
 class FiniteDifference:
 
@@ -29,6 +31,10 @@ class FiniteDifference:
         self.f = kwargs['f']
         self.g = kwargs['g']
         self.kap = kwargs['kap']
+
+        # Control functions
+        self.Q = kwargs['Q']
+        self.M = kwargs['M']
 
         self.K = kwargs['K']
         self.Ku = kwargs['Ku']
@@ -56,12 +62,12 @@ class FiniteDifference:
     
     def RHS(self, t, y):
         """
-        Compute right hand side of PDE:
+        Compute right hand side of PDE: ( CONTROL TERMS ALSO ADDED )    
 
         .. math:: 
             \\begin{split}
-                u_{t} &= \Delta u - \mathbf{v} \cdot \\nabla u + f(u, \\beta) \\\\
-                \\beta_{t} &= g(u, \\beta)
+                u_{t} &= \Delta u - \mathbf{v} \cdot \\nabla u + f(u, \\beta) + Q(x,y,t) \\\\
+                \\beta_{t} &= g(u, \\beta) + M(x,y,t)
             \end{split}
 
         Parameters
@@ -90,7 +96,11 @@ class FiniteDifference:
             Ux, Uy = (self.Dx.dot(U.T)).T, self.Dy.dot(U) # grad(U) = (u_x, u_y)
             Uxx, Uyy = (self.D2x.dot(U.T)).T, self.D2y.dot(U) # u_{xx} and u_{yy}
         else:
-            Ux, Uy = np.dot(U, self.Dx.T), np.dot(self.Dy, U) # grad(U) = (u_x, u_y)
+            # Ux, Uy = np.dot(U, self.Dx.T), np.dot(self.Dy, U) # grad(U) = (u_x, u_y)
+        # REWRITE WITH UPWIND METHOD
+            wind_x, wind_y = np.where(V1>=0, 1, -1), np.where(V2>=0, 1, -1)
+            Ux, Uy = grad_u_upwind(U, self.dx, self.dy, wind_x, wind_y)
+            
             Uxx, Uyy = np.dot(U, self.D2x.T), np.dot(self.D2y, U) # u_{xx} and u_{yy}
             
         # Laplacian of u
@@ -115,10 +125,15 @@ class FiniteDifference:
         diffusion *= self.cmp[0]
         convection *= self.cmp[1]
         reaction *= self.cmp[2]
+
+        # Control Terms
+        X,Y = self.getMesh()
+        temp_control = self.Q(X, Y, t) * (U) # reference temp is 0
+        fuel_control = self.M(X, Y, t) *  (B) # mirror term.
         
-        # Compute RHS
-        Uf = diffusion - convection + reaction 
-        Bf = self.g(U, B)
+        # Compute RHS (modified with control terms).
+        Uf = diffusion - convection + reaction + temp_control
+        Bf = self.g(U, B) + fuel_control
         
         # Add boundary conditions
         Uf, Bf = self.boundaryConditions(Uf, Bf)
@@ -129,6 +144,7 @@ class FiniteDifference:
             raise Exception("Numerical approximation diverges. Please check number of nodes in space or time.") 
         
         # Build y = [vec(u), vec(\beta)]^T and return
+        # print(f" U max : {np.max(Uf)}, B max : {np.max(Bf)} ")
         return np.r_[Uf.flatten('F'), Bf.flatten('F')] 
 
     def boundaryConditions(self, U, B):

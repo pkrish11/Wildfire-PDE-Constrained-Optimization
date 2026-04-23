@@ -6,11 +6,11 @@ Wildfire class to handle the numerical implementation.
 import numpy as np
 from .numerical.space import FiniteDifference, FFTDerivatives
 from .numerical.time import Integration
-from .utils.functions import K, Ku, f, g, H, sigmoid
+from .utils.functions import K, Ku, f, g, H, sigmoid, sigmoid_u, Q_func, M_func
 
 class Fire:
     
-    def __init__(self, kap, eps, upc, alp, q, x_lim, y_lim, t_lim, **kwargs):
+    def __init__(self, kap, eps, upc, alp, q, x_lim, y_lim, t_lim, control_params, **kwargs):
         """Wildfire constructor.
 
         Parameters
@@ -33,6 +33,10 @@ class Fire:
             :math:`t` domain limits.
         **kwargs : dict
             Extra parameters.
+        control_params : dict
+            Parameters defining the water drops --> v, sigma_x, sigma_y, k, delta, T, control_var.
+            control_var is a Nx4 array, N is number of drops and other elements are in order
+            (x_i, y_i, theta_i, t_i).
 
         Other Parameters
         ----------------
@@ -62,9 +66,14 @@ class Fire:
         self.sf = kwargs.get('sf', 'step')
 
         # Define PDE functions #
-        s = lambda u: H(u, self.upc) if self.sf == 'step' else sigmoid(u)
+        # Modify this to be sigmoid always
+        s = lambda u: sigmoid_u(u, self.upc) # lambda u: H(u, self.upc) if self.sf == 'step' else sigmoid(u) 
         self.f = lambda u, b: f(u, b, self.eps, self.alp, s)
         self.g = lambda u, b: g(u, b, self.eps, self.q, s)
+
+        # define Q and M functions as a property of Fire object.
+        self.Q = lambda x,y,t: Q_func(x, y, t, control_params)
+        self.M = lambda x,y,t: M_func(x, y, t, control_params)  
 
         if self.complete:
             self.K = lambda u: K(u, self.kap, self.eps)
@@ -157,7 +166,8 @@ class Fire:
 
             # Create FD
             FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), 
-                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, kap=self.kap, K=self.K, Ku=self.Ku)
+                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q=self.Q, M=self.M,
+                kap=self.kap, K=self.K, Ku=self.Ku)
 
             # FD Mesh
             X, Y = FDD.getMesh()
