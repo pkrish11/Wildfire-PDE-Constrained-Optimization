@@ -1,0 +1,9 @@
+{
+    "control_params": {
+        "v": 5,
+        "sigma_x": 5,
+        "sigma_y": 5,
+        "T": 3,
+        "k": 0.5,
+        "delta": 0.2,
+        "control_vars": 

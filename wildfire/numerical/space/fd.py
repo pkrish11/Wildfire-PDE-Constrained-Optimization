@@ -31,6 +31,9 @@ class FiniteDifference:
         self.f = kwargs['f']
         self.g = kwargs['g']
         self.kap = kwargs['kap']
+        self.epsilon = kwargs['epsilon']
+        self.alpha = kwargs["alpha"]
+        self.q = kwargs["q"]
 
         # Control functions
         self.Q = kwargs['Q']
@@ -38,6 +41,7 @@ class FiniteDifference:
 
         self.K = kwargs['K']
         self.Ku = kwargs['Ku']
+        self.s = kwargs['s'] # sigmoid function being used in reaction terms.
 
         # Differentiation matrices
         self.Dx = FD1Matrix(self.Nx, self.dx, self.order, self.sparse)
@@ -59,6 +63,108 @@ class FiniteDifference:
 
     def getMesh(self):
         return self.X, self.Y
+
+    def RHS_adjoint(self, t, y, field_data_vec):
+        """
+        Compute RHS of adjoint PDEs
+
+        Parameters
+        ----------
+        t : array_like, shape (Nt + 1, )
+            Time discrete variable.
+        y : array_like, shape (2 * Ny * Nx) 
+            r_u and r_beta variables vectorized.
+
+        Returns
+        -------
+        y : array_like, shape (2 * Ny * Nx)
+            New r_u and r_beta and fuel variables vectorized.
+        """
+        # Vector field evaluation
+        V1, V2 = self.V(t)
+        #print(V1, V2)
+        
+        # Recover r_u and b from y
+        r_u = np.copy(y[:self.Ny * self.Nx].reshape((self.Ny, self.Nx), order='F'))
+        r_beta = np.copy(y[self.Ny * self.Nx:].reshape((self.Ny, self.Nx), order='F'))
+
+        # Recover u and beta at current time step from field_data_vec
+        u = np.copy(field_data_vec[:self.Ny * self.Nx].reshape((self.Ny, self.Nx), order='F'))
+        beta= np.copy(field_data_vec[self.Ny * self.Nx:].reshape((self.Ny, self.Nx), order='F'))
+
+        # Compute derivatives
+        if self.sparse:
+            Ru_x, Ru_y = (self.Dx.dot(r_u.T)).T, self.Dy.dot(r_u) 
+            Ru_xx, Ru_yy = (self.D2x.dot(r_u.T)).T, self.D2y.dot(r_u) # rho_u_{xx} and rho_u_{yy}
+        else:
+            # Ux, Uy = np.dot(U, self.Dx.T), np.dot(self.Dy, U) # grad(U) = (u_x, u_y)
+        # REWRITE WITH UPWIND METHOD
+            wind_x, wind_y = np.where(V1>=0, 1, -1), np.where(V2>=0, 1, -1)
+            Ru_x, Ru_y = grad_u_upwind(r_u, self.dx, self.dy, wind_x, wind_y)
+            
+            Ru_xx, Ru_yy = np.dot(r_u, self.D2x.T), np.dot(self.D2y, r_u) # rho_u_{xx} and rho_u_{yy}
+            
+        # Laplacian of rho_u
+        lap_Ru = Ru_xx + Ru_yy
+
+        # Compute diffusion
+        if self.K is not None and self.Ku is not None: # Using K(U) diffusion function
+            K = self.K(r_u) 
+            Ku = self.Ku(r_u)
+            #Kx = self.Ku(U) * Ux 
+            #Ky = self.Ku(U) * Uy 
+            #diffusion = Kx * Ux + Ky * Uy + K * lapU
+            diffusion = Ku * (Ru_x ** 2 + Ru_y ** 2) + K * lap_Ru
+        else: # Diffusion is constant with value \kappa
+            # \kappa \Delta u = \kappa (u_{xx} + u_{yy}) or \kappa lap(U)
+            diffusion = self.kap * lap_Ru 
+        
+        # convection term
+        r_u_wind_x, r_u_wind_y = r_u * V1 , r_u * V2 # define rho_u * wind term
+        Dx_ru_wind , Dy_ru_wind =  np.dot(r_u_wind_x, self.Dx.T), np.dot(self.Dy, r_u_wind_y) # gradient using differential matrices
+        convection = Dx_ru_wind + Dy_ru_wind
+
+        # for reaction terms, compute common term involving sigmoids and exponentials
+        k = 10 # hyperparam from sigmoid function
+        common_term = beta * np.exp(u/(1+self.epsilon*u)) * self.s(u) * (k*(1-self.s(u)) + 1/(1+self.epsilon * u)**2)
+
+        # partial f / partial u term
+        df_du = -self.alpha + common_term
+
+        # partial g / partial u term
+        dg_du = -  (self.epsilon/self.q) * common_term
+
+        # partial f / partial beta
+        df_db =   self.s(u) * np.exp(u / (1+self.epsilon*u))
+
+        # partial g / partial u
+        dg_db = -self.s(u) * (self.epsilon/self.q) * np.exp(u / (1+self.epsilon*u))
+        
+        # Control Terms
+        # partial Q / partial u
+        X,Y = self.getMesh()
+        dq_du = self.Q(X, Y, t)
+        # partial M / partial beta
+        dm_db = self.M(X, Y, t)
+        
+        # Compute RHS (modified with control terms).
+        Uf = -(diffusion + convection + r_u * df_du + r_beta * dg_du - r_u * dq_du)
+        Bf = -(r_u * df_db + r_beta * dg_db - r_beta * dm_db)
+        
+        # Add boundary conditions
+        Uf, Bf = self.boundaryConditions(Uf, Bf) # homogenous dirichlet BC should be okay for sensitivity params
+
+        # Check if approximation diverges
+        if np.any(np.isnan(Uf)) or np.any(np.isinf(Uf)) or np.any(np.isnan(Bf)) or  \
+            np.any(np.isinf(Bf)) or np.any(Uf > MAX_FLOAT) or np.any(Bf > MAX_FLOAT):
+            raise Exception("Numerical approximation diverges. Please check number of nodes in space or time.") 
+        
+        # Build y = [vec(u), vec(\beta)]^T and return
+        # print(f" U max : {np.max(Uf)}, B max : {np.max(Bf)} ")
+        return np.r_[Uf.flatten('F'), Bf.flatten('F')] 
+
+
+
     
     def RHS(self, t, y):
         """

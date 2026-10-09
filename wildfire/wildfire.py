@@ -67,9 +67,9 @@ class Fire:
 
         # Define PDE functions #
         # Modify this to be sigmoid always
-        s = lambda u: sigmoid_u(u, self.upc) # lambda u: H(u, self.upc) if self.sf == 'step' else sigmoid(u) 
-        self.f = lambda u, b: f(u, b, self.eps, self.alp, s)
-        self.g = lambda u, b: g(u, b, self.eps, self.q, s)
+        self.s = lambda u: sigmoid_u(u, self.upc) # lambda u: H(u, self.upc) if self.sf == 'step' else sigmoid(u) 
+        self.f = lambda u, b: f(u, b, self.eps, self.alp, self.s)
+        self.g = lambda u, b: g(u, b, self.eps, self.q, self.s)
 
         # define Q and M functions as a property of Fire object.
         self.Q = lambda x,y,t: Q_func(x, y, t, control_params)
@@ -81,6 +81,67 @@ class Fire:
         else:
             self.K = None
             self.Ku = None
+    
+    def solve_adjointPDE(self, Nx, Ny, Nt, ruTerminal, rbTerminal, u_array, b_array, v, space_method='fd', time_method='RK4', last=True, **kwargs):
+        """ Solve adjoint PDEs backwards in time, for the sensitivity parameters rho_u and rho_b.
+        Adjoint PDEs defined like : 
+        -> d/dt (rho_u) = 
+        -> d/dt (rho_beta) = 
+
+        Input params : 
+        u_array and b_array must be ndarrays of shape (Nt, Nx, Ny) with Nt going from t_min to t_max.
+        Solutions to forward PDE at all time steps for u and beta. 
+        """
+        # Space approximation #
+        if space_method == 'FD': # Finite Differences
+            # Get finite difference extra parameters
+            acc = kwargs.get('acc', 2)
+            sparse = kwargs.get('sparse', False)
+
+            # Create FD
+            FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), 
+                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q=self.Q, M=self.M, 
+                kap=self.kap, K=self.K, Ku=self.Ku, s=self.s, epsilon=self.eps, alpha=self.alp, q=self.q)
+
+            # FD Mesh
+            X, Y = FDD.getMesh()
+
+            # Get RHS using FD
+            RHS = FDD.RHS_adjoint
+            
+            # Get reshaper for approximations
+            reshaper = FDD.reshaper
+
+            # Terminal condition evaluation
+            Ru_T = ruTerminal
+            Rbeta_T = rbTerminal
+
+
+        # Time approximation
+        Nt += 1 # Include initial condition
+        integrator = Integration(Nt, (self.t_min, self.t_max), time_method, last, vdata=type(v) is np.ndarray, adjoint=True)
+        t = integrator.getTime()
+
+        # Vectorize variables for Method of Lines. [vec(U), vec(B)]^T (RK4 solves simaltaneously for colum vectors.)
+        y0 = np.zeros((2 * Ny * Nx))
+        y0[:Ny * Nx] = Ru_T.flatten('F')
+        y0[Ny * Nx:] = Rbeta_T.flatten('F')
+
+        # vectorize input arrays of u and beta values, for method of lines.
+        y_array = np.zeros((Nt, 2 * Nx * Ny))
+        y_array[:, : Ny * Nx] = u_array.reshape(Nt, Nx * Ny, order='F')
+        y_array[:, Ny * Nx:] = b_array.reshape(Nt, Nx * Ny, order='F')
+        y_array = y_array[::-1] # reverse time entries, so entries go from t_max to t_min.
+        
+        # Integration
+        y = integrator.solve_adjoint(t, RHS, y0, y_array)
+
+        # Reshape arrays 
+        r_u, r_beta = reshaper(y) if last else reshaper(y, Nt)
+            
+        return t, X, Y, r_u, r_beta
+
+
 
     def solvePDE(self, Nx, Ny, Nt, u0, b0, v, space_method='fd', time_method='RK4', last=True, **kwargs):
         """Solve numerical PDE.
@@ -167,7 +228,7 @@ class Fire:
             # Create FD
             FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), 
                 order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q=self.Q, M=self.M,
-                kap=self.kap, K=self.K, Ku=self.Ku)
+                kap=self.kap, K=self.K, Ku=self.Ku, s=self.s, epsilon=self.eps, alpha=self.alp, q=self.q)
 
             # FD Mesh
             X, Y = FDD.getMesh()

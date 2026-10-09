@@ -207,12 +207,12 @@ marimo/_lsp/
 __marimo__/
 
 # Numpy Files
-.npy 
-.npz
+*.npy 
+*.npz
 
 # data files
-.csv
+*.csv
 
 # Images
-.png 
-.pdf
+*.png 
+*.pdf

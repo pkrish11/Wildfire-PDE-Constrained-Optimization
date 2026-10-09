@@ -67,6 +67,121 @@ def Euler(t, F, y0, last=True, vdata=False):
         
     return y
 
+def Euler_adjoint(t, F, y0, field_data, last=True, vdata=False):
+    """Euler method for the adjoint system with stored forward fields."""
+    Nt = t.shape[0]
+    dt = t[1] - t[0]
+
+    if last:
+        y = y0
+
+        if vdata:
+            for n in range(Nt - 1):
+                field_vec = field_data[n, :]
+                y = y + dt * F(n, y, field_vec)
+        else:
+            for n in range(Nt - 1):
+                field_vec = field_data[n, :]
+                y = y + dt * F(t[n], y, field_vec)
+
+    else:
+        y = np.zeros((Nt, y0.shape[0]))
+        y[0] = y0
+
+        if vdata:
+            for n in range(Nt - 1):
+                field_vec = field_data[n, :]
+                y[n + 1] = y[n] + dt * F(n, y[n], field_vec)
+        else:
+            for n in range(Nt - 1):
+                field_vec = field_data[n, :]
+                y[n + 1] = y[n] + dt * F(t[n], y[n], field_vec)
+
+    return y
+
+def RK4_adjoint(t, F, y0, field_data, last=True, vdata=False):
+    """Runge-Kutta of fourth order implementation.
+
+    Currently using constant (not intermediate) values of u and beta fields in RHS computation.
+
+    Parameters
+    ----------
+    t : array_like
+        Time discrete variable.
+    F : function
+        RHS function of ODE.
+    y0 : array_like
+        Initial condition
+    last : bool, optional
+        Return and keep only last approximation, by default True.
+    vdata: bool, option
+        Vector field is np.ndarray, by default False.
+        If vdata is True, method uses time iteration as index for vector field data.
+    field_data: array_like
+        values of u and beta fields, vectorized, ordered form t_max to t_min in Nt steps.
+
+    Returns
+    -------
+    array_like
+        Aproximated solution of "adjoint" ODE.
+
+    """
+    # Get number time of nodes
+    Nt = t.shape[0]
+
+    # Get \Delta t
+    dt = t[1] - t[0] 
+    # print(f"{dt}")
+    
+    if last: # Only keep and return last approximation
+        # Initial condition
+        y = y0
+        
+        if vdata:
+            for n in range(Nt - 1):
+                field_vec = field_data[n,:]
+                yc = np.copy(y)
+                k1 = F(n, yc, field_vec) # pass vector of u and b values from y_array into RHS computation method also.
+                k2 = F(n, yc + 0.5 * dt * k1, field_vec)
+                k3 = F(n, yc + 0.5 * dt * k2, field_vec)
+                k4 = F(n, yc + dt * k3, field_vec)
+                y = yc + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
+        else:
+            for n in range(Nt - 1):
+                field_vec = field_data[n,:]
+                yc = np.copy(y)
+                k1 = F(t[n], yc, field_vec)
+                k2 = F(t[n] + 0.5 * dt, yc + 0.5 * dt * k1, field_vec)
+                k3 = F(t[n] + 0.5 * dt, yc + 0.5 * dt * k2, field_vec)
+                k4 = F(t[n] + dt, yc + dt * k3, field_vec)
+
+                y = yc + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    else: # Keep and return all approximations
+        # Array for approximations
+        y = np.zeros((Nt, y0.shape[0]))
+        y[0] = y0 # Initial condition
+
+        if vdata:
+            for n in range(Nt - 1):
+                field_vec = field_data[n,:]
+                k1 = F(n, y[n], field_vec)
+                k2 = F(n, y[n] + 0.5 * dt * k1, field_vec)
+                k3 = F(n, y[n] + 0.5 * dt * k2, field_vec)
+                k4 = F(n, y[n] + dt * k3, field_vec)
+                y[n + 1] = y[n] + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
+        else:
+            for n in range(Nt - 1):
+                field_vec = field_data[n,:]
+                # print(f"solving for time t={t[n]}")
+                k1 = F(t[n], y[n], field_vec)
+                k2 = F(t[n] + 0.5 * dt, y[n] + 0.5 * dt * k1, field_vec)
+                k3 = F(t[n] + 0.5 * dt, y[n] + 0.5 * dt * k2, field_vec)
+                k4 = F(t[n] + dt, y[n] + dt * k3, field_vec)
+                y[n + 1] = y[n] + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
+        
+    return y
+
 def RK4(t, F, y0, last=True, vdata=False):
     """Runge-Kutta of fourth order implementation.
 
