@@ -210,6 +210,9 @@ __marimo__/
 .npy 
 .npz
 
+# data files
+.csv
+
 # Images
 .png 
 .pdf
