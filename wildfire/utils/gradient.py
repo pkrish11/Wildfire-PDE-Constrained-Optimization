@@ -29,8 +29,15 @@ class gradient:
     def compute_gradient(self, u, beta, rho_u, rho_beta):
         grad = np.zeros(self.num_drops * 4) # initialize gradient vector
         x,y,t = self.X, self.Y, self.time_arr
-        rho_u = rho_u[::-1, :, :] # switch order of rho_u and rho_beta fields, since they go from T_final to T_initial
-        rho_beta = rho_beta[::-1, :, :]
+        ## 
+        ## 16 October - Implemented changes here to correct the off-by-one error, pairing rho(m) with u/beta(m-1).
+        ##             - Also get rid of terminal level since it is fixed by conditions, does not affect grad.
+        ##
+        rho_u = rho_u[::-1, :, :][1:]  # switch order of rho_u and rho_beta fields, since they go from T_final to T_initial
+        rho_beta = rho_beta[::-1, :, :][1:]
+        u, beta  = u[:-1], beta[:-1]    # states at levels 0..N-1
+        t        = self.time_arr[:-1]   # times t_0..t_{N-1}
+        x, y     = self.X, self.Y
         for i in range(self.num_drops):
             # drop_number = i 
             # compute common terms in both Gradients 

@@ -148,8 +148,8 @@ class FiniteDifference:
         dm_db = self.M(X, Y, t)
         
         # Compute RHS (modified with control terms).
-        Uf = -(diffusion + convection + r_u * df_du + r_beta * dg_du - r_u * dq_du)
-        Bf = -(r_u * df_db + r_beta * dg_db - r_beta * dm_db)
+        Uf = -(diffusion + convection + r_u * df_du + r_beta * dg_du + r_u * dq_du)
+        Bf = -(r_u * df_db + r_beta * dg_db + r_beta * dm_db)
         
         # Add boundary conditions
         Uf, Bf = self.boundaryConditions(Uf, Bf) # homogenous dirichlet BC should be okay for sensitivity params
@@ -205,8 +205,9 @@ class FiniteDifference:
             # Ux, Uy = np.dot(U, self.Dx.T), np.dot(self.Dy, U) # grad(U) = (u_x, u_y)
         # REWRITE WITH UPWIND METHOD
             wind_x, wind_y = np.where(V1>=0, 1, -1), np.where(V2>=0, 1, -1)
-            Ux, Uy = grad_u_upwind(U, self.dx, self.dy, wind_x, wind_y)
-            
+
+            ### NEED TO REPLACE UPWIND SCHEME TO GET RID OF EXCESSIVE NUMERICAL DIFFUSION
+            Ux, Uy = grad_u_upwind(U, self.dx, self.dy, wind_x, wind_y)            
             Uxx, Uyy = np.dot(U, self.D2x.T), np.dot(self.D2y, U) # u_{xx} and u_{yy}
             
         # Laplacian of u

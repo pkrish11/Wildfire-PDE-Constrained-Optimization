@@ -90,12 +90,12 @@ def Euler_adjoint(t, F, y0, field_data, last=True, vdata=False):
 
         if vdata:
             for n in range(Nt - 1):
-                field_vec = field_data[n, :]
-                y[n + 1] = y[n] + dt * F(n, y[n], field_vec)
+                field_vec = field_data[n + 1, :]          ## MADE FIX HERE FOR USING PREVIOUS TIME JACOBIAN, CORRECTING THE
+                y[n + 1] = y[n] + dt * F(t[n + 1], y[n], field_vec)     # OFF BY ONE ERROR  
         else:
             for n in range(Nt - 1):
-                field_vec = field_data[n, :]
-                y[n + 1] = y[n] + dt * F(t[n], y[n], field_vec)
+                field_vec = field_data[n + 1, :]          # FIX HERE AS WELL.
+                y[n + 1] = y[n] + dt * F(t[n + 1], y[n], field_vec)
 
     return y
 
