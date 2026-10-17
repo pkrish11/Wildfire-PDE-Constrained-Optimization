@@ -42,7 +42,7 @@ class optimizer_object:
         control_vars_2d = control_vars.reshape(-1, 4)
         self.control_params["control_vars"] = control_vars_2d
         self.fire_object = wildfire.Fire(**self.physical_params, control_params=self.control_params)
-        t, X, Y, U, B = self.fire_object.solvePDE(self.Nx, self.Ny, self.Nt, self.u0, self.b0, self.V, space_method='FD', time_method = 'Euler', last=False, acc=2, sparse=False)
+        t, X, Y, U, B = self.fire_object.solvePDE(self.Nx, self.Ny, self.Nt, self.u0, self.b0, self.V, space_method='FD', time_method = 'RK4', last=False, acc=2, sparse=False)
         self.X, self.Y, self.t =  X, Y, t
 
         # set gradient object as well in here. 

@@ -3,6 +3,7 @@
 import numpy as np
 from .diffmat import FD1Matrix, FD2Matrix
 from .upwind import grad_u_upwind
+from .upwind3 import upwind3_derivative
 
 MAX_FLOAT = 1e10 # Defined to check divergence.... 
 
@@ -207,7 +208,14 @@ class FiniteDifference:
             wind_x, wind_y = np.where(V1>=0, 1, -1), np.where(V2>=0, 1, -1)
 
             ### NEED TO REPLACE UPWIND SCHEME TO GET RID OF EXCESSIVE NUMERICAL DIFFUSION
-            Ux, Uy = grad_u_upwind(U, self.dx, self.dy, wind_x, wind_y)            
+            # Ux, Uy = grad_u_upwind(U, self.dx, self.dy, wind_x, wind_y)        
+            # Ux, Uy = (self.Dx.dot(U.T)).T, self.Dy.dot(U) # grad(U) = (u_x, u_y)    
+            # TRYING WITH 3RD ORDER UPWIND SCHEME
+
+            # RHS (forward): axis=1 is x, axis=0 is y
+            Ux = upwind3_derivative(U, self.dx, V1, axis=1)
+            Uy = upwind3_derivative(U, self.dy, V2, axis=0)
+
             Uxx, Uyy = np.dot(U, self.D2x.T), np.dot(self.D2y, U) # u_{xx} and u_{yy}
             
         # Laplacian of u
