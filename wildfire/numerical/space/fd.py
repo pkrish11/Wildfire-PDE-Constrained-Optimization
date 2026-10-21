@@ -123,7 +123,11 @@ class FiniteDifference:
         # convection term
         r_u_wind_x, r_u_wind_y = r_u * V1 , r_u * V2 # define rho_u * wind term
         Dx_ru_wind , Dy_ru_wind =  np.dot(r_u_wind_x, self.Dx.T), np.dot(self.Dy, r_u_wind_y) # gradient using differential matrices
-        convection = Dx_ru_wind + Dy_ru_wind
+        # convection = Dx_ru_wind + Dy_ru_wind
+        
+        ## WITH 3RD ORDER UPWIND SCHEME
+        # RHS_adjoint: transpose of the forward operator (D_pos^T = -D_neg, checked to machine precision)
+        convection = (V1 * upwind3_derivative(r_u, self.dx, -V1, axis=1) + V2 * upwind3_derivative(r_u, self.dy, -V2, axis=0))
 
         # for reaction terms, compute common term involving sigmoids and exponentials
         k = 10 # hyperparam from sigmoid function

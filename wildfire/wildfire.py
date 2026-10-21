@@ -81,8 +81,9 @@ class Fire:
         else:
             self.K = None
             self.Ku = None
+
     
-    def solve_adjointPDE(self, Nx, Ny, Nt, ruTerminal, rbTerminal, u_array, b_array, v, space_method='fd', time_method='RK4', last=True, **kwargs):
+    def solve_adjointPDE(self, Nx, Ny, Nt, ruTerminal, rbTerminal, u_array, b_array, v, gradient_object, space_method='fd', time_method='RK4', last=True, **kwargs):
         """ Solve adjoint PDEs backwards in time, for the sensitivity parameters rho_u and rho_b.
         Adjoint PDEs defined like : 
         -> d/dt (rho_u) = 
@@ -106,8 +107,9 @@ class Fire:
             # FD Mesh
             X, Y = FDD.getMesh()
 
-            # Get RHS using FD
-            RHS = FDD.RHS_adjoint
+            # Get forward and backward RHS using FD
+            RHS_adj = FDD.RHS_adjoint
+            RHS_fwd = FDD.RHS
             
             # Get reshaper for approximations
             reshaper = FDD.reshaper
@@ -134,12 +136,12 @@ class Fire:
         y_array = y_array[::-1] # reverse time entries, so entries go from t_max to t_min.
         
         # Integration
-        y = integrator.solve_adjoint(t, RHS, y0, y_array)
+        y, gradient = integrator.solve_adjoint(t, RHS_adj, RHS_fwd, y0, y_array, gradient_object)
 
         # Reshape arrays 
         r_u, r_beta = reshaper(y) if last else reshaper(y, Nt)
             
-        return t, X, Y, r_u, r_beta
+        return t, X, Y, r_u, r_beta, gradient
 
 
 
@@ -276,7 +278,7 @@ class Fire:
 
         # Time approximation
         Nt += 1 # Include initial condition
-        integrator = Integration(Nt, (self.t_min, self.t_max), time_method, last, vdata=type(v) is np.ndarray)
+        integrator = Integration(Nt, (self.t_min, self.t_max), time_method, last, vdata=type(v) is np.ndarray, adjoint=False)
         t = integrator.getTime()
 
         # Vectorize variables for Method of Lines. [vec(U), vec(B)]^T

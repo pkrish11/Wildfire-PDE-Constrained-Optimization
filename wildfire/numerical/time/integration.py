@@ -28,7 +28,7 @@ class Integration:
             If vector field is np.ndarray.
         adjoint : bool
             If solving adjoint or forward PDE  
-
+    
         Raises
         ------
         Exception
@@ -38,6 +38,7 @@ class Integration:
         self.t_min, self.t_max = t_lim
         self.last = last
         self.vdata = vdata
+
 
         # If vector field is data, index of numerical method is used as time variable.
         if self.vdata:
@@ -66,11 +67,11 @@ class Integration:
     def solve(self, t, F, y0):
         return self.time_integration(t, F, y0, self.last, self.vdata)
 
-    def solve_adjoint(self, t, F, y0, y_array):
+    def solve_adjoint(self, t, F_adj, F_fwd, y0, y_array, gradient_object):
         if self.method == 'Euler':
             self.time_integration = Euler_adjoint
         elif self.method == 'RK4':
             self.time_integration = RK4_adjoint
-        return self.time_integration(t, F, y0, y_array, self.last, self.vdata)
+        return self.time_integration(t, F_adj, F_fwd, y0, y_array, gradient_object)
 
 

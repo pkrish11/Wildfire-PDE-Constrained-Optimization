@@ -60,21 +60,21 @@ class optimizer_object:
        # print(f"objective : {objective}")
         return objective
     
-    def gradient(self, normalized_control_vars): 
+    def backward_and_gradient(self, normalized_control_vars): 
         control_vars = self.denormalize(normalized_control_vars)
         t, X, Y, U, B, _ = self._evaluate(control_vars)
-        _, rho_u, rho_b = self.backward_eval(U, B)
         control_vars_2d = control_vars.reshape(-1, 4)
         self.control_params["control_vars"] = control_vars_2d
-        gradient_calculator = gradient.gradient(control_vars_2d, self.control_params, X, Y, t)
-        grad = gradient_calculator.compute_gradient(U, B, rho_u, rho_b)
+        gradient_object = gradient.gradient(control_vars_2d, self.control_params, X, Y, t)
+
+        _, rho_u, rho_b, grad = self.backward_eval(U, B, gradient_object)
 
         normalized_grad = self.normalize_gradient(grad)
      #   print(f"normalized grad : {normalized_grad}")
-        return normalized_grad
+        return normalized_grad, rho_u, rho_b
 
 
-    def backward_eval(self, U, B):
+    def backward_eval(self, U, B, gradient_object):
         if not self.fire_object:
             print("Run Forward Simulation First.")
             return None
@@ -82,10 +82,10 @@ class optimizer_object:
         B0 = self.b0(self.X ,self.Y)
         rho_u_terminal, rho_b_terminal = self.get_terminal_conditions(B0, self.weights)
 
-        t1, X1, Y1, rho_u, rho_b = self.fire_object.solve_adjointPDE(self.Nx, self.Ny, self.Nt, rho_u_terminal, rho_b_terminal, U, B, self.V, 
-            space_method='FD', time_method = 'Euler', last=False, acc=2, sparse=False)
-        
-        return t1, rho_u, rho_b
+        t1, X1, Y1, rho_u, rho_b, grad = self.fire_object.solve_adjointPDE(self.Nx, self.Ny, self.Nt, rho_u_terminal, rho_b_terminal, U, B, self.V, gradient_object,
+            space_method='FD', time_method = 'RK4', last=False, acc=2, sparse=False)
+                
+        return t1, rho_u, rho_b, grad
     
     def get_terminal_conditions(self, B0, weights):
         rho_u_terminal = np.zeros_like(B0) # # terminal condition is rho_u = 0 across the grid.

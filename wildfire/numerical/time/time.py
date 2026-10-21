@@ -99,7 +99,7 @@ def Euler_adjoint(t, F, y0, field_data, last=True, vdata=False):
 
     return y
 
-def RK4_adjoint(t, F, y0, field_data, last=True, vdata=False):
+def RK4_adjoint(t, F_adj, F_fwd, y0, field_data, gradient_object):
     """Runge-Kutta of fourth order implementation.
 
     Currently using constant (not intermediate) values of u and beta fields in RHS computation.
@@ -108,17 +108,17 @@ def RK4_adjoint(t, F, y0, field_data, last=True, vdata=False):
     ----------
     t : array_like
         Time discrete variable.
-    F : function
-        RHS function of ODE.
+    F_adj : function
+        RHS function of adjoint equations.
+    F_fwd : function
+        RHS function of forward equations, required for recomputing intermediate forward fields.
     y0 : array_like
         Initial condition
-    last : bool, optional
-        Return and keep only last approximation, by default True.
-    vdata: bool, option
-        Vector field is np.ndarray, by default False.
-        If vdata is True, method uses time iteration as index for vector field data.
     field_data: array_like
         values of u and beta fields, vectorized, ordered form t_max to t_min in Nt steps.
+    
+    v_data and last functions are input params to stay consistent, but function is only implemented
+    for last=False and v_data=False.
 
     Returns
     -------
@@ -129,58 +129,48 @@ def RK4_adjoint(t, F, y0, field_data, last=True, vdata=False):
     # Get number time of nodes
     Nt = t.shape[0]
 
-    # Get \Delta t
-    dt = t[1] - t[0] 
-    # print(f"{dt}")
+    # Get  positive Delta t
+    dt = np.abs(t[1] - t[0])
     
-    if last: # Only keep and return last approximation
-        # Initial condition
-        y = y0
-        
-        if vdata:
-            for n in range(Nt - 1):
-                field_vec = field_data[n,:]
-                yc = np.copy(y)
-                k1 = F(n, yc, field_vec) # pass vector of u and b values from y_array into RHS computation method also.
-                k2 = F(n, yc + 0.5 * dt * k1, field_vec)
-                k3 = F(n, yc + 0.5 * dt * k2, field_vec)
-                k4 = F(n, yc + dt * k3, field_vec)
-                y = yc + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
-        else:
-            for n in range(Nt - 1):
-                field_vec = field_data[n,:]
-                yc = np.copy(y)
-                k1 = F(t[n], yc, field_vec)
-                k2 = F(t[n] + 0.5 * dt, yc + 0.5 * dt * k1, field_vec)
-                k3 = F(t[n] + 0.5 * dt, yc + 0.5 * dt * k2, field_vec)
-                k4 = F(t[n] + dt, yc + dt * k3, field_vec)
+    # Keep and return all approximations
+    y = np.zeros((Nt, y0.shape[0])) # array for storing backward fields.
+    y[0] = y0 # Initial condition
 
-                y = yc + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
+    # (dF/dy)^T w from RHS_adjoint
+    JT = lambda w, Y, tt: -F_adj(tt, w, Y)    
+    n_u = # get nx * ny fields.      
+    grad = np.zeros(4 * num_drops)
 
-    else: # Keep and return all approximations
-        # Array for approximations
-        y = np.zeros((Nt, y0.shape[0]))
-        y[0] = y0 # Initial condition
 
-        if vdata:
-            for n in range(Nt - 1):
-                field_vec = field_data[n,:]
-                k1 = F(n, y[n], field_vec)
-                k2 = F(n, y[n] + 0.5 * dt * k1, field_vec)
-                k3 = F(n, y[n] + 0.5 * dt * k2, field_vec)
-                k4 = F(n, y[n] + dt * k3, field_vec)
-                y[n + 1] = y[n] + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
-        else:
-            for n in range(Nt - 1):
-                field_vec = field_data[n,:]
-                # print(f"solving for time t={t[n]}")
-                k1 = F(t[n], y[n], field_vec)
-                k2 = F(t[n] + 0.5 * dt, y[n] + 0.5 * dt * k1, field_vec)
-                k3 = F(t[n] + 0.5 * dt, y[n] + 0.5 * dt * k2, field_vec)
-                k4 = F(t[n] + dt, y[n] + dt * k3, field_vec)
-                y[n + 1] = y[n] + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
-        
-    return y
+    for n in range(Nt - 1):
+        # Redo forward RK4 solve to get the intermediate fields, Y2,Y3,Y4.
+        t0 = t[n + 1]    # forward step goes t[n+1] -> t[n] in given time convention.
+        Y1 = field_data[n + 1]
+        k1 = F_fwd(t0, Y1)
+        Y2 = Y1 + 0.5 * dt * k1
+        k2 = F_fwd(t0 + 0.5 * dt, Y2)
+        Y3 = Y1 + 0.5 * dt * k2
+        k3 = F_fwd(t0 + 0.5 * dt, Y3)
+        Y4 = Y1 + dt * k3
+
+        # backward RK4 solve
+        # exact discrete adjoint of that step (stages in reverse)
+        lam = y[n]                    # current time-step
+        w4 = lam / 6;                 th4 = dt * JT(w4, Y4, t0 + dt)
+        w3 = lam / 3 + th4;           th3 = dt * JT(w3, Y3, t0 + 0.5 * dt)
+        w2 = lam / 3 + 0.5 * th3;     th2 = dt * JT(w2, Y2, t0 + 0.5 * dt)
+        w1 = lam / 6 + 0.5 * th2;     th1 = dt * JT(w1, Y1, t0)
+        y[n + 1] = lam + th1 + th2 + th3 + th4
+
+        # --- gradient: dJ/dp += h * sum_i w_i^T dF/dp(Y_i, t_i) ---
+        for Yi, wi, ti in ((Y1, w1, t0), (Y2, w2, t0 + 0.5*h),
+                        (Y3, w3, t0 + 0.5*h), (Y4, w4, t0 + h)):
+            U_i  = Yi[:n_u].reshape((Ny, Nx), order='F')
+            B_i  = Yi[n_u:].reshape((Ny, Nx), order='F')
+            wu_i = wi[:n_u].reshape((Ny, Nx), order='F')
+            wb_i = wi[n_u:].reshape((Ny, Nx), order='F')
+            grad += h * gradient_object.stage_gradient(U_i, B_i, wu_i, wb_i, ti)
+    return y, grad
 
 def RK4(t, F, y0, last=True, vdata=False):
     """Runge-Kutta of fourth order implementation.
@@ -245,7 +235,7 @@ def RK4(t, F, y0, last=True, vdata=False):
                 k3 = F(n, y[n] + 0.5 * dt * k2)
                 k4 = F(n, y[n] + dt * k3)
                 y[n + 1] = y[n] + (1/6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
-        else:
+        else: #### ONLY BRANCH THAT SHOULD BE IMPLEMENTED ( WIND PASSED AS FUNCTION AND LAST=FALSE)
             for n in range(Nt - 1):
                 k1 = F(t[n], y[n])
                 k2 = F(t[n] + 0.5 * dt, y[n] + 0.5 * dt * k1)

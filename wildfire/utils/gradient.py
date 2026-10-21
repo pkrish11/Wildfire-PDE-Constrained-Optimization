@@ -25,6 +25,27 @@ class gradient:
         self.dy = Y[1, 0] - Y[0, 0]
         self.dt = time_arr[1] - time_arr[0]
     
+    # function to compute accurate RK4 gradient.
+    def stage_gradient(self, U, B, rho_u_bar, rho_beta_bar, t_stage):
+        """
+        Gradient contribution of ONE RK4 stage (without the dt factor):
+            rho_bar_i^T dF/dp (Y_i, t_i)
+        U, B                : forward stage state Y_i, shape (Ny, Nx)
+        rho_u_bar, rho_beta_bar : stage adjoint rho_bar_i, shape (Ny, Nx)
+        t_stage             : stage time t_n + c_i*dt (scalar)
+        """
+        g = np.zeros(self.num_drops * 4)
+        x, y, t = self.X, self.Y, t_stage
+        W = -(self.k * U * rho_u_bar + self.delta * B * rho_beta_bar)
+        for i in range(self.num_drops):
+            psi_times_theta = self.Theta_i(x, y, t, i) * self.psi_i(x, y, t, i)
+            Wpt = W * psi_times_theta
+            g[0 + 4*i] = np.sum(Wpt * self.d_psi_d_xi(x, y, t, i))
+            g[1 + 4*i] = np.sum(Wpt * self.d_psi_d_yi(x, y, t, i))
+            g[2 + 4*i] = np.sum(Wpt * self.d_psi_d_thetai(x, y, t, i))
+            g[3 + 4*i] = np.sum(Wpt * self.d_ti_term(x, y, t, i))
+        return g * self.dx * self.dy
+    
     # functions to compute gradient for x,y,
     def compute_gradient(self, u, beta, rho_u, rho_beta):
         grad = np.zeros(self.num_drops * 4) # initialize gradient vector
