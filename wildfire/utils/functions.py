@@ -210,15 +210,19 @@ def sum_spray_terms(x, y, t, control_params):
     control_vars = control_params["control_vars"]
     N = np.shape(control_vars)[0] # number of water drops to be made.
 
-    sum = 0
+    total = 0
     for i in range(N):
         x_i, y_i = control_vars[i, 0], control_vars[i, 1]
         theta_i = control_vars[i, 2]
         t_i = control_vars[i, 3]
+        
+        Theta = time_control(t, t_i, T) # evaluate time-control (Theta) term
+        if (Theta < 1e-10): # check if is non-zero, and only proceed to compute spray_gaussian if is non-zero.
+            continue
+        total += Theta * spray_gaussian(x, y, t, x_i, y_i, t_i, theta_i, v, sigma_x, sigma_y)
         # add time control * moving gaussian to total term. 
-        sum += time_control(t, t_i, T) * spray_gaussian(x, y, t, x_i, y_i, t_i, theta_i, v, sigma_x, sigma_y)
     
-    return sum
+    return total
 
 def S_func(x, y, t, control_params):
     S = sum_spray_terms(x, y, t, control_params) 

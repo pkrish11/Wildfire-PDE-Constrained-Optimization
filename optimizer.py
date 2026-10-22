@@ -22,6 +22,8 @@ class optimizer_object:
         self.dt = (physical_params['t_lim'][1] - physical_params['t_lim'][0]) / Nt
         self.norm_range = normalization_ranges[:,1] - normalization_ranges[:,0]
         self.x_min = normalization_ranges[:,0]
+        self._rho_u_terminal, self._rho_b_terminal = None, None
+
     
     def denormalize(self, normalized_control_vars):
         """ Normalize all the control vars between 0 and 1
@@ -78,7 +80,6 @@ class optimizer_object:
         if not self.fire_object:
             print("Run Forward Simulation First.")
             return None
-       
         B0 = self.b0(self.X ,self.Y)
         rho_u_terminal, rho_b_terminal = self.get_terminal_conditions(B0, self.weights)
 
@@ -88,16 +89,18 @@ class optimizer_object:
         return t1, rho_u, rho_b, grad
     
     def get_terminal_conditions(self, B0, weights):
-        rho_u_terminal = np.zeros_like(B0) # # terminal condition is rho_u = 0 across the grid.
-        rho_b_terminal = np.zeros_like(B0)
-        rho_b_terminal[1:-1, 1:-1] = - weights[1:-1, 1:-1] / (B0[1:-1,1:-1] + 1e-4)
-        # set boundary values to 0 for rho_b_terminal.
-        rho_b_terminal[-1,:] = 0
-        rho_b_terminal[0,:] = 0
-        rho_b_terminal[:,0] = 0
-        rho_b_terminal[:,-1] = 0
+        if (self._rho_u_terminal is None) and (self._rho_b_terminal is None):
+            rho_u_terminal = np.zeros_like(B0) # # terminal condition is rho_u = 0 across the grid.
+            rho_b_terminal = np.zeros_like(B0)
+            rho_b_terminal[1:-1, 1:-1] = - weights[1:-1, 1:-1] / (B0[1:-1,1:-1] + 1e-4)
+            # set boundary values to 0 for rho_b_terminal.
+            rho_b_terminal[-1,:] = 0
+            rho_b_terminal[0,:] = 0
+            rho_b_terminal[:,0] = 0
+            rho_b_terminal[:,-1] = 0
+            self._rho_u_terminal, self._rho_b_terminal = rho_u_terminal, rho_b_terminal  
 
-        return rho_u_terminal, rho_b_terminal
+        return self._rho_u_terminal, self._rho_b_terminal
     
     def _evaluate(self, control_vars):
         """Run and cache the forward solve for one control vector."""

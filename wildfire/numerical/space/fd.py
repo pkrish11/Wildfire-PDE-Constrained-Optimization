@@ -11,7 +11,7 @@ MAX_FLOAT = 1e10 # Defined to check divergence....
 
 class FiniteDifference:
 
-    def __init__(self, Nx, Ny, x_lim, y_lim, order=2, sparse=False, cmp=(1, 1, 1), **kwargs):
+    def __init__(self, Nx, Ny, x_lim, y_lim, t_lim, order=2, sparse=False, cmp=(1, 1, 1), **kwargs):
         # Domain info
         self.Nx = Nx
         self.Ny = Ny
@@ -22,6 +22,7 @@ class FiniteDifference:
         self.X, self.Y = np.meshgrid(self.x, self.y) # X, Y meshgrid
         self.dx = self.x[1] - self.x[0] # \Delta x
         self.dy = self.y[1] - self.y[0] # \Delta y
+        t_min, t_max = t_lim
 
         # Others params
         self.order = order # Finite difference order of accuracy (2 or 4)
@@ -57,6 +58,14 @@ class FiniteDifference:
         if type(self.v) is np.ndarray:
             self.V = lambda t: self.v[t]
         else:
+            V_first = self.v(self.X, self.Y, t_min)
+            V_last  = self.v(self.X, self.Y, t_max)
+            if all(np.array_equal(np.broadcast_to(a, self.X.shape), np.broadcast_to(b, self.X.shape))
+                for a, b in zip(V_first, V_last)):          # constant wind
+                V_const = tuple(np.broadcast_to(c, self.X.shape).copy() for c in V_first)
+                self.V = lambda t: V_const                     # returns precomputed arrays
+            else:                                              # changing wind: keep as is
+                self.V = lambda t: self.v(self.X, self.Y, t)
             self.V = lambda t: self.v(self.X, self.Y, t)
 
     def getX(self):
@@ -95,40 +104,13 @@ class FiniteDifference:
         # Recover u and beta at current time step from field_data_vec
         u = np.copy(field_data_vec[:self.Ny * self.Nx].reshape((self.Ny, self.Nx), order='F'))
         beta= np.copy(field_data_vec[self.Ny * self.Nx:].reshape((self.Ny, self.Nx), order='F'))
-
-        # Compute derivatives
-        if self.sparse:
-            Ru_x, Ru_y = (self.Dx.dot(r_u.T)).T, self.Dy.dot(r_u) 
-            Ru_xx, Ru_yy = (self.D2x.dot(r_u.T)).T, self.D2y.dot(r_u) # rho_u_{xx} and rho_u_{yy}
-        else:
-            # Ux, Uy = np.dot(U, self.Dx.T), np.dot(self.Dy, U) # grad(U) = (u_x, u_y)
-        # REWRITE WITH UPWIND METHOD
-            wind_x, wind_y = np.where(V1>=0, 1, -1), np.where(V2>=0, 1, -1)
-            Ru_x, Ru_y = grad_u_upwind(r_u, self.dx, self.dy, wind_x, wind_y)
-            
-            Ru_xx, Ru_yy = np.dot(r_u, self.D2x.T), np.dot(self.D2y, r_u) # rho_u_{xx} and rho_u_{yy}
             
         # Laplacian of rho_u
+        Ru_xx, Ru_yy = np.dot(r_u, self.D2x.T), np.dot(self.D2y, r_u) # rho_u_{xx} and rho_u_{yy}
         lap_Ru = Ru_xx + Ru_yy
-
-        # Compute diffusion
-        if self.K is not None and self.Ku is not None: # Using K(U) diffusion function
-            K = self.K(r_u) 
-            Ku = self.Ku(r_u)
-            #Kx = self.Ku(U) * Ux 
-            #Ky = self.Ku(U) * Uy 
-            #diffusion = Kx * Ux + Ky * Uy + K * lapU
-            diffusion = Ku * (Ru_x ** 2 + Ru_y ** 2) + K * lap_Ru
-        else: # Diffusion is constant with value \kappa
-            # \kappa \Delta u = \kappa (u_{xx} + u_{yy}) or \kappa lap(U)
-            diffusion = self.kap * lap_Ru 
+        diffusion = self.kap * lap_Ru         # compute diffusion
         
-        # convection term
-        r_u_wind_x, r_u_wind_y = r_u * V1 , r_u * V2 # define rho_u * wind term
-        Dx_ru_wind , Dy_ru_wind =  np.dot(r_u_wind_x, self.Dx.T), np.dot(self.Dy, r_u_wind_y) # gradient using differential matrices
-        # convection = Dx_ru_wind + Dy_ru_wind
-        
-        ## WITH 3RD ORDER UPWIND SCHEME
+        ## CONVECTION WITH 3RD ORDER UPWIND SCHEME
         # RHS_adjoint: transpose of the forward operator (D_pos^T = -D_neg, checked to machine precision)
         convection = (V1 * upwind3_derivative(r_u, self.dx, -V1, axis=1) + V2 * upwind3_derivative(r_u, self.dy, -V2, axis=0))
 
@@ -158,7 +140,7 @@ class FiniteDifference:
         # CONTROL TERMS --> NEW ONES
         S = self.S(X, Y, t)
         dq_du = -self.Q_const * S * dq(u)
-        dm_db = -self.M_const * M * dm(beta)
+        dm_db = -self.M_const * S * dm(beta)
         
         # Compute RHS (modified with control terms).
         Uf = -(diffusion + convection + r_u * df_du + r_beta * dg_du + r_u * dq_du)
@@ -171,10 +153,9 @@ class FiniteDifference:
         if np.any(np.isnan(Uf)) or np.any(np.isinf(Uf)) or np.any(np.isnan(Bf)) or  \
             np.any(np.isinf(Bf)) or np.any(Uf > MAX_FLOAT) or np.any(Bf > MAX_FLOAT):
             raise Exception("Numerical approximation diverges. Please check number of nodes in space or time.") 
-        
-        # Build y = [vec(u), vec(\beta)]^T and return
-        # print(f" U max : {np.max(Uf)}, B max : {np.max(Bf)} ")
-        return np.r_[Uf.flatten('F'), Bf.flatten('F')] 
+
+        # return np.r_[Uf.flatten('F'), Bf.flatten('F')] 
+        return np.concatenate((Uf.ravel('F'), Bf.ravel('F'))) ## replacing r_ with ravel and concatenate to reduce Python overhead
 
 
 
@@ -211,39 +192,14 @@ class FiniteDifference:
         B = np.copy(y[self.Ny * self.Nx:].reshape((self.Ny, self.Nx), order='F'))
 
         # Compute derivatives
-        if self.sparse:
-            Ux, Uy = (self.Dx.dot(U.T)).T, self.Dy.dot(U) # grad(U) = (u_x, u_y)
-            Uxx, Uyy = (self.D2x.dot(U.T)).T, self.D2y.dot(U) # u_{xx} and u_{yy}
-        else:
-            # Ux, Uy = np.dot(U, self.Dx.T), np.dot(self.Dy, U) # grad(U) = (u_x, u_y)
-        # REWRITE WITH UPWIND METHOD
-            wind_x, wind_y = np.where(V1>=0, 1, -1), np.where(V2>=0, 1, -1)
+        Ux = upwind3_derivative(U, self.dx, V1, axis=1)
+        Uy = upwind3_derivative(U, self.dy, V2, axis=0)
 
-            ### NEED TO REPLACE UPWIND SCHEME TO GET RID OF EXCESSIVE NUMERICAL DIFFUSION
-            # Ux, Uy = grad_u_upwind(U, self.dx, self.dy, wind_x, wind_y)        
-            # Ux, Uy = (self.Dx.dot(U.T)).T, self.Dy.dot(U) # grad(U) = (u_x, u_y)    
-            # TRYING WITH 3RD ORDER UPWIND SCHEME
-
-            # RHS (forward): axis=1 is x, axis=0 is y
-            Ux = upwind3_derivative(U, self.dx, V1, axis=1)
-            Uy = upwind3_derivative(U, self.dy, V2, axis=0)
-
-            Uxx, Uyy = np.dot(U, self.D2x.T), np.dot(self.D2y, U) # u_{xx} and u_{yy}
+        Uxx, Uyy = np.dot(U, self.D2x.T), np.dot(self.D2y, U) # u_{xx} and u_{yy}
             
         # Laplacian of u
         lapU = Uxx + Uyy
-
-        # Compute diffusion
-        if self.K is not None and self.Ku is not None: # Using K(U) diffusion function
-            K = self.K(U) 
-            Ku = self.Ku(U)
-            #Kx = self.Ku(U) * Ux 
-            #Ky = self.Ku(U) * Uy 
-            #diffusion = Kx * Ux + Ky * Uy + K * lapU
-            diffusion = Ku * (Ux ** 2 + Uy ** 2) + K * lapU
-        else: # Diffusion is constant with value \kappa
-            # \kappa \Delta u = \kappa (u_{xx} + u_{yy}) or \kappa lap(U)
-            diffusion = self.kap * lapU 
+        diffusion = self.kap * lapU 
         
         convection = Ux * V1 + Uy * V2 # v \cdot grad u.    
         reaction = self.f(U, B) # eval fuel
@@ -261,8 +217,8 @@ class FiniteDifference:
        # Control Terms --> NEW ONES WITH SATURATION
         X,Y = self.getMesh()
         S = self.S(X, Y, t)
-        temp_control = -self.Q_const * self.S * q(U) 
-        fuel_control = -self.M_const * self.M * m(B) 
+        temp_control = -self.Q_const * S * q(U) 
+        fuel_control = -self.M_const * S * m(B) 
 
         # Compute RHS (modified with control terms).
         Uf = diffusion - convection + reaction + temp_control
@@ -276,9 +232,8 @@ class FiniteDifference:
             np.any(np.isinf(Bf)) or np.any(Uf > MAX_FLOAT) or np.any(Bf > MAX_FLOAT):
             raise Exception("Numerical approximation diverges. Please check number of nodes in space or time.") 
         
-        # Build y = [vec(u), vec(\beta)]^T and return
-        # print(f" U max : {np.max(Uf)}, B max : {np.max(Bf)} ")
-        return np.r_[Uf.flatten('F'), Bf.flatten('F')] 
+        # return np.r_[Uf.flatten('F'), Bf.flatten('F')] 
+        return np.concatenate((Uf.ravel('F'), Bf.ravel('F')))
 
     def boundaryConditions(self, U, B):
         """Add Dirichlet boundary conditions (BC).

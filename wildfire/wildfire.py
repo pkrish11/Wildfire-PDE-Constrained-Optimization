@@ -102,8 +102,8 @@ class Fire:
             sparse = kwargs.get('sparse', False)
 
             # Create FD
-            FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), 
-                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q=self.Q, M=self.M, 
+            FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), (self.t_min, self.t_max), 
+                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q_const=self.Q_const, M_const=self.M_const,  S=self.S,
                 kap=self.kap, K=self.K, Ku=self.Ku, s=self.s, epsilon=self.eps, alpha=self.alp, q=self.q)
 
             # FD Mesh
@@ -230,8 +230,8 @@ class Fire:
             sparse = kwargs.get('sparse', False)
 
             # Create FD
-            FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), 
-                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q=self.Q, M=self.M,
+            FDD = FiniteDifference(Nx, Ny, (self.x_min, self.x_max), (self.y_min, self.y_max), (self.t_min, self.t_max), 
+                order=acc, sparse=sparse, cmp=self.cmp, v=v, f=self.f, g=self.g, Q_const=self.Q_const, M_const=self.M_const, S=self.S,
                 kap=self.kap, K=self.K, Ku=self.Ku, s=self.s, epsilon=self.eps, alpha=self.alp, q=self.q)
 
             # FD Mesh

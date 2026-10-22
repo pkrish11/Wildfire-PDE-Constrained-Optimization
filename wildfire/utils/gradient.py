@@ -42,7 +42,10 @@ class gradient:
         # NEW CONTROL TERM WITH SATURATION
         W = -(self.k * q(U) * rho_u_bar + self.delta * m(B) * rho_beta_bar)
         for i in range(self.num_drops):
-            psi_times_theta = self.Theta_i(x, y, t, i) * self.psi_i(x, y, t, i)
+            Theta = self.Theta_i(x, y, t, i)
+            if (Theta < 1e-10):
+                continue
+            psi_times_theta = Theta * self.psi_i(x, y, t, i)
             Wpt = W * psi_times_theta
             g[0 + 4*i] = np.sum(Wpt * self.d_psi_d_xi(x, y, t, i))
             g[1 + 4*i] = np.sum(Wpt * self.d_psi_d_yi(x, y, t, i))
