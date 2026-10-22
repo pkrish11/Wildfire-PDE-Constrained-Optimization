@@ -3,6 +3,7 @@ Class designed to compute gradient, with input as parameters, u, beta, rho_u and
 """
 import numpy as np
 from .functions import Q_func, M_func, time_control, spray_gaussian
+from .new_adjoint_terms import q, m
 
 class gradient:
 
@@ -36,7 +37,10 @@ class gradient:
         """
         g = np.zeros(self.num_drops * 4)
         x, y, t = self.X, self.Y, t_stage
-        W = -(self.k * U * rho_u_bar + self.delta * B * rho_beta_bar)
+        # OLD CONTROL TERM
+        # W = -(self.k * U * rho_u_bar + self.delta * B * rho_beta_bar)
+        # NEW CONTROL TERM WITH SATURATION
+        W = -(self.k * q(U) * rho_u_bar + self.delta * m(B) * rho_beta_bar)
         for i in range(self.num_drops):
             psi_times_theta = self.Theta_i(x, y, t, i) * self.psi_i(x, y, t, i)
             Wpt = W * psi_times_theta

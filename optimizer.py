@@ -60,7 +60,7 @@ class optimizer_object:
        # print(f"objective : {objective}")
         return objective
     
-    def backward_and_gradient(self, normalized_control_vars): 
+    def gradient(self, normalized_control_vars): 
         control_vars = self.denormalize(normalized_control_vars)
         t, X, Y, U, B, _ = self._evaluate(control_vars)
         control_vars_2d = control_vars.reshape(-1, 4)
@@ -71,7 +71,7 @@ class optimizer_object:
 
         normalized_grad = self.normalize_gradient(grad)
      #   print(f"normalized grad : {normalized_grad}")
-        return normalized_grad, rho_u, rho_b
+        return normalized_grad
 
 
     def backward_eval(self, U, B, gradient_object):

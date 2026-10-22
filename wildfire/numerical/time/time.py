@@ -137,9 +137,10 @@ def RK4_adjoint(t, F_adj, F_fwd, y0, field_data, gradient_object):
     y[0] = y0 # Initial condition
 
     # (dF/dy)^T w from RHS_adjoint
-    JT = lambda w, Y, tt: -F_adj(tt, w, Y)    
-    n_u = # get nx * ny fields.      
-    grad = np.zeros(4 * num_drops)
+    JT = lambda w, Y, tt: -F_adj(tt, w, Y)      
+    grad = np.zeros(4 * gradient_object.num_drops)
+    Nx, Ny = gradient_object.X.shape[0], gradient_object.Y.shape[1]
+    n_u = Nx * Ny
 
 
     for n in range(Nt - 1):
@@ -163,13 +164,13 @@ def RK4_adjoint(t, F_adj, F_fwd, y0, field_data, gradient_object):
         y[n + 1] = lam + th1 + th2 + th3 + th4
 
         # --- gradient: dJ/dp += h * sum_i w_i^T dF/dp(Y_i, t_i) ---
-        for Yi, wi, ti in ((Y1, w1, t0), (Y2, w2, t0 + 0.5*h),
-                        (Y3, w3, t0 + 0.5*h), (Y4, w4, t0 + h)):
+        for Yi, wi, ti in ((Y1, w1, t0), (Y2, w2, t0 + 0.5*dt),
+                        (Y3, w3, t0 + 0.5*dt), (Y4, w4, t0 + dt)):
             U_i  = Yi[:n_u].reshape((Ny, Nx), order='F')
             B_i  = Yi[n_u:].reshape((Ny, Nx), order='F')
             wu_i = wi[:n_u].reshape((Ny, Nx), order='F')
             wb_i = wi[n_u:].reshape((Ny, Nx), order='F')
-            grad += h * gradient_object.stage_gradient(U_i, B_i, wu_i, wb_i, ti)
+            grad += dt * gradient_object.stage_gradient(U_i, B_i, wu_i, wb_i, ti)
     return y, grad
 
 def RK4(t, F, y0, last=True, vdata=False):

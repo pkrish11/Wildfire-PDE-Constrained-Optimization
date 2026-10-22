@@ -4,6 +4,7 @@ import numpy as np
 from .diffmat import FD1Matrix, FD2Matrix
 from .upwind import grad_u_upwind
 from .upwind3 import upwind3_derivative
+from ...utils.new_adjoint_terms import q,m,dq,dm
 
 MAX_FLOAT = 1e10 # Defined to check divergence.... 
 
@@ -145,12 +146,15 @@ class FiniteDifference:
         # partial g / partial u
         dg_db = -self.s(u) * (self.epsilon/self.q) * np.exp(u / (1+self.epsilon*u))
         
-        # Control Terms
-        # partial Q / partial u
         X,Y = self.getMesh()
-        dq_du = self.Q(X, Y, t)
+        # Control Terms ---. OLD ONES   
+        # dq_du = self.Q(X, Y, t)
         # partial M / partial beta
-        dm_db = self.M(X, Y, t)
+        # dm_db = self.M(X, Y, t)
+
+        # CONTROL TERMS --> NEW ONES
+        dq_du = self.Q(X, Y, t) * dq(u)
+        dm_db = self.M(X, Y, t) * dm(beta)
         
         # Compute RHS (modified with control terms).
         Uf = -(diffusion + convection + r_u * df_du + r_beta * dg_du + r_u * dq_du)
@@ -245,11 +249,16 @@ class FiniteDifference:
         convection *= self.cmp[1]
         reaction *= self.cmp[2]
 
-        # Control Terms
+        # Control Terms --> OLD ONES
+       # X,Y = self.getMesh()
+       # temp_control = self.Q(X, Y, t) * (U) # reference temp is 0
+       # fuel_control = self.M(X, Y, t) *  (B) # mirror term.
+
+       # Control Terms --> NEW ONES WITH SATURATION
         X,Y = self.getMesh()
-        temp_control = self.Q(X, Y, t) * (U) # reference temp is 0
-        fuel_control = self.M(X, Y, t) *  (B) # mirror term.
-        
+        temp_control = self.Q(X, Y, t) * q(U) 
+        fuel_control = self.M(X, Y, t) * m(B) 
+
         # Compute RHS (modified with control terms).
         Uf = diffusion - convection + reaction + temp_control
         Bf = self.g(U, B) + fuel_control
