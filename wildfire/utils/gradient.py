@@ -2,7 +2,7 @@
 Class designed to compute gradient, with input as parameters, u, beta, rho_u and rho_beta fields.
 """
 import numpy as np
-from .functions import Q_func, M_func, time_control, spray_gaussian
+from .functions import Q_func, M_func, time_control, spray_gaussian, S_func
 from .new_adjoint_terms import q, m
 
 class gradient:

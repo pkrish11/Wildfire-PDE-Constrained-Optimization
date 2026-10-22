@@ -38,8 +38,10 @@ class FiniteDifference:
         self.q = kwargs["q"]
 
         # Control functions
-        self.Q = kwargs['Q']
-        self.M = kwargs['M']
+        self.S = kwargs['S']
+        self.Q_const = kwargs['Q_const']
+        self.M_const = kwargs['M_const']
+        
 
         self.K = kwargs['K']
         self.Ku = kwargs['Ku']
@@ -132,7 +134,8 @@ class FiniteDifference:
 
         # for reaction terms, compute common term involving sigmoids and exponentials
         k = 10 # hyperparam from sigmoid function
-        common_term = beta * np.exp(u/(1+self.epsilon*u)) * self.s(u) * (k*(1-self.s(u)) + 1/(1+self.epsilon * u)**2)
+        s_u = self.s(u)
+        common_term = beta * np.exp(u/(1+self.epsilon*u)) * s_u * (k*(1-s_u) + 1/(1+self.epsilon * u)**2)
 
         # partial f / partial u term
         df_du = -self.alpha + common_term
@@ -141,10 +144,10 @@ class FiniteDifference:
         dg_du = -  (self.epsilon/self.q) * common_term
 
         # partial f / partial beta
-        df_db =   self.s(u) * np.exp(u / (1+self.epsilon*u))
+        df_db =   s_u * np.exp(u / (1+self.epsilon*u))
 
         # partial g / partial u
-        dg_db = -self.s(u) * (self.epsilon/self.q) * np.exp(u / (1+self.epsilon*u))
+        dg_db = -s_u * (self.epsilon/self.q) * np.exp(u / (1+self.epsilon*u))
         
         X,Y = self.getMesh()
         # Control Terms ---. OLD ONES   
@@ -153,8 +156,9 @@ class FiniteDifference:
         # dm_db = self.M(X, Y, t)
 
         # CONTROL TERMS --> NEW ONES
-        dq_du = self.Q(X, Y, t) * dq(u)
-        dm_db = self.M(X, Y, t) * dm(beta)
+        S = self.S(X, Y, t)
+        dq_du = -self.Q_const * S * dq(u)
+        dm_db = -self.M_const * M * dm(beta)
         
         # Compute RHS (modified with control terms).
         Uf = -(diffusion + convection + r_u * df_du + r_beta * dg_du + r_u * dq_du)
@@ -256,8 +260,9 @@ class FiniteDifference:
 
        # Control Terms --> NEW ONES WITH SATURATION
         X,Y = self.getMesh()
-        temp_control = self.Q(X, Y, t) * q(U) 
-        fuel_control = self.M(X, Y, t) * m(B) 
+        S = self.S(X, Y, t)
+        temp_control = -self.Q_const * self.S * q(U) 
+        fuel_control = -self.M_const * self.M * m(B) 
 
         # Compute RHS (modified with control terms).
         Uf = diffusion - convection + reaction + temp_control

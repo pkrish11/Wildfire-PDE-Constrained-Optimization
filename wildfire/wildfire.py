@@ -6,7 +6,7 @@ Wildfire class to handle the numerical implementation.
 import numpy as np
 from .numerical.space import FiniteDifference, FFTDerivatives
 from .numerical.time import Integration
-from .utils.functions import K, Ku, f, g, H, sigmoid, sigmoid_u, Q_func, M_func
+from .utils.functions import K, Ku, f, g, H, sigmoid, sigmoid_u, S_func
 
 class Fire:
     
@@ -72,8 +72,10 @@ class Fire:
         self.g = lambda u, b: g(u, b, self.eps, self.q, self.s)
 
         # define Q and M functions as a property of Fire object.
-        self.Q = lambda x,y,t: Q_func(x, y, t, control_params)
-        self.M = lambda x,y,t: M_func(x, y, t, control_params)  
+        self.Q_const = control_params['k']
+        self.M_const = control_params['delta']
+
+        self.S = lambda x,y,t: S_func(x, y, t, control_params) # common function with psi*theta terms to speed up computation
 
         if self.complete:
             self.K = lambda u: K(u, self.kap, self.eps)

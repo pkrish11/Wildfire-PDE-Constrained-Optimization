@@ -220,6 +220,10 @@ def sum_spray_terms(x, y, t, control_params):
     
     return sum
 
+def S_func(x, y, t, control_params):
+    S = sum_spray_terms(x, y, t, control_params) 
+    return S    
+
 def Q_func(x, y, t, control_params):
 
     k = control_params["k"]
