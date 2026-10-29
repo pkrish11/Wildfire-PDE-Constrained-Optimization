@@ -1,7 +1,8 @@
 import numpy as np
 
 # terms to enforce water/fuel control with saturation (limited total capacity)
-u_s, b_s = 2, 0.4                                  # saturation scales (tune)
+# saturation scales (tuned to optimizer (A2_optimizer values)
+u_s, b_s = 1.5, 0.3
 
 # new Q term is Q = - kappa * psi * theta * u_s * tanh(u/u_s). self.Q_func from utils imports everything except u_s * tanh(u/u_s) part.
 q  = lambda u: u_s * np.tanh(u / u_s)      
