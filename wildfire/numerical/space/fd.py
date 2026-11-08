@@ -66,7 +66,6 @@ class FiniteDifference:
                 self.V = lambda t: V_const                     # returns precomputed arrays
             else:                                              # changing wind: keep as is
                 self.V = lambda t: self.v(self.X, self.Y, t)
-            self.V = lambda t: self.v(self.X, self.Y, t)
 
     def getX(self):
         return self.x
